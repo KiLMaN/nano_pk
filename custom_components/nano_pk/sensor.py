@@ -32,6 +32,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 entities.append(HargassnerErrorSensor(bridge, name))
             elif p.key()=="ZK": 
                 entities.append(HargassnerStateSensor(bridge, name, lang))
+            elif p.key()=="HKZustand_1":
+                entities.append(HargassnerProgramStateSensor(bridge,name,lang))
             else:
                 entities.append(HargassnerSensor(bridge, name+" "+p.description(), p.key()))
         entities.append(HargassnerEnergySensor(bridge, name))
@@ -41,6 +43,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             bridge,
             HargassnerErrorSensor(bridge, name),
             HargassnerStateSensor(bridge, name, lang),
+            HargassnerProgramStateSensor(bridge, name, lang),
             HargassnerSensor(bridge, name+" boiler temperature", "TK"),
             HargassnerSensor(bridge, name+" smoke gas temperature", "TRG"),
             HargassnerSensor(bridge, name+" output", "Leistung", "mdi:fire"),
@@ -222,3 +225,31 @@ class HargassnerStateSensor(HargassnerSensor):
         self._value = self._options[idxState]
         if idxState==6 or idxState==7: self._icon = "mdi:fireplace"  # (transition to) full firing
         else: self._icon = "mdi:fireplace-off"
+
+class HargassnerProgramStateSensor(HargassnerSensor):
+
+    def __init__(self, bridge, deviceName, lang):
+        super().__init__(bridge, deviceName+" current mode state", "HKZustand_1")
+        self._stateClass = None
+        self._unit = None
+        self._deviceClass = SensorDeviceClass.ENUM
+        self._options = ["Summer / Off", "Comfort", "Switching to Reduced", "Reduced", "Stopped", "?5?", "Error", "?7?", "?8?", "Frost protection"]
+
+    async def async_update(self):
+        rawState = self._bridge.getValue(self._paramName)
+        try:
+            if rawState==None: idxState = 0
+            else: idxState = int(rawState)
+            if not (idxState>=0 and idxState<=12):
+                _LOGGER.warning("HargassnerProgramStateSensor.update(): State index out of bounds.\n")
+                idxState=0
+        except Exception:
+            _LOGGER.warning("HargassnerProgramStateSensor.update(): Invalid state.\n")
+            idxState = 0
+
+        self._value = self._options[idxState]
+        if idxState==0 or idxState==7: self._icon = "mdi:power"  
+        elif idxState==1 : self._icon = "mdi:weather-sunny"  
+        elif idxState==2 or idxState==3 : self._icon = "mdi:weather-night"  
+        elif idxState==9 : self._icon = "mdi:snowflake"
+        else: self._icon = "mdi:information"
